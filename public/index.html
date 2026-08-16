@@ -1,0 +1,680 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Twilio Sender</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --sms-color:       #6366F1;
+      --sms-light:       #EEF2FF;
+      --wa-color:        #25D366;
+      --wa-light:        #DCFCE7;
+      --wa-dark:         #16A34A;
+      --border:          #E2E8F0;
+      --bg:              #F8FAFC;
+      --card:            #FFFFFF;
+      --text:            #1E293B;
+      --muted:           #64748B;
+      --error:           #EF4444;
+      --ok:              #10B981;
+      --skip:            #F59E0B;
+      --radius:          10px;
+    }
+
+    body {
+      font-family: Inter, system-ui, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 24px 16px 48px;
+    }
+
+    h1 { font-size: 22px; font-weight: 800; letter-spacing: -0.5px; }
+    h2 { font-size: 13px; font-weight: 700; margin-bottom: 12px; }
+
+    .subtitle { font-size: 13px; color: var(--muted); margin-top: 2px; }
+
+    .page { max-width: 960px; margin: 0 auto; }
+
+    /* Header */
+    .header {
+      display: flex; align-items: center; justify-content: space-between;
+      margin-bottom: 20px; flex-wrap: wrap; gap: 12px;
+    }
+    .logo {
+      display: flex; align-items: center; gap: 10px;
+    }
+    .logo-icon {
+      width: 36px; height: 36px; border-radius: 10px;
+      background: linear-gradient(135deg, #6366F1, #4F46E5);
+      color: #fff; display: flex; align-items: center; justify-content: center;
+      font-weight: 800; font-size: 18px; flex-shrink: 0;
+    }
+
+    /* Card */
+    .card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius);
+      padding: 20px;
+      margin-bottom: 16px;
+    }
+
+    /* Channel toggle */
+    .channel-bar {
+      display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+    }
+    .channel-label { font-size: 13px; font-weight: 700; flex-shrink: 0; }
+    .toggle-group { display: flex; border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+    .toggle-btn {
+      padding: 7px 18px; font-size: 13px; font-weight: 700;
+      background: none; border: none; cursor: pointer; display: flex;
+      align-items: center; gap: 6px; color: var(--muted);
+      transition: background 0.15s, color 0.15s;
+    }
+    .toggle-btn.active-sms      { background: var(--sms-light); color: var(--sms-color); }
+    .toggle-btn.active-whatsapp { background: var(--wa-light);  color: var(--wa-dark);   }
+    .toggle-btn + .toggle-btn   { border-left: 1px solid var(--border); }
+
+    .from-badge {
+      margin-left: auto; font-size: 12px; font-weight: 700;
+      font-family: monospace; padding: 5px 10px;
+      border-radius: 7px; background: var(--sms-light); color: var(--sms-color);
+      transition: background 0.2s, color 0.2s;
+    }
+    .from-badge.wa { background: var(--wa-light); color: var(--wa-dark); }
+
+    /* Grid */
+    .grid { display: grid; grid-template-columns: 1fr 380px; gap: 16px; }
+    @media (max-width: 720px) { .grid { grid-template-columns: 1fr; } }
+
+    /* Form elements */
+    label { font-size: 12px; font-weight: 600; color: var(--muted); display: block; margin-bottom: 5px; }
+    input, textarea, select {
+      width: 100%; padding: 8px 12px; font-size: 13px;
+      border: 1px solid var(--border); border-radius: 8px;
+      outline: none; background: #fff; font-family: inherit;
+      transition: border-color 0.15s;
+    }
+    input:focus, textarea:focus, select:focus { border-color: #6366F1; }
+    textarea { resize: vertical; }
+
+    /* Chips */
+    .chips { display: flex; flex-wrap: wrap; gap: 6px; }
+    .chip {
+      display: inline-flex; align-items: center; gap: 4px;
+      padding: 3px 10px; border-radius: 99px; font-size: 11px; font-weight: 700;
+      border: 1px solid var(--border); cursor: pointer; white-space: nowrap;
+      transition: background 0.12s, color 0.12s;
+    }
+    .chip.active-sms      { background: var(--sms-color); color: #fff; border-color: var(--sms-color); }
+    .chip.active-whatsapp { background: var(--wa-color);  color: #fff; border-color: var(--wa-color); }
+    .chip.phone { background: #F1F5F9; color: var(--muted); cursor: default; font-family: monospace; }
+    .chip.phone .del { cursor: pointer; font-size: 13px; color: var(--muted); line-height: 1; }
+    .chip.phone .del:hover { color: var(--error); }
+
+    /* Template info bar */
+    .tpl-info {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 9px 12px; border-radius: 8px; margin-bottom: 14px;
+      border: 1px solid transparent; font-size: 12px; font-weight: 700;
+    }
+    .tpl-sid { margin-left: auto; font-family: monospace; font-size: 11px; font-weight: 400;
+      background: #fff; padding: 2px 8px; border-radius: 5px; border: 1px solid var(--border); }
+
+    /* Var rows */
+    .var-row { display: flex; gap: 8px; align-items: center; margin-bottom: 8px; }
+    .var-badge {
+      min-width: 52px; height: 36px; border-radius: 8px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      font-family: monospace; font-size: 12px; font-weight: 700;
+    }
+    .var-row input { flex: 1; }
+    .del-btn {
+      background: none; border: none; cursor: pointer; padding: 4px;
+      color: var(--muted); font-size: 18px; line-height: 1; flex-shrink: 0;
+    }
+    .del-btn:hover { color: var(--error); }
+
+    /* Buttons */
+    .btn {
+      display: inline-flex; align-items: center; gap: 7px;
+      padding: 9px 20px; border-radius: 8px; font-size: 13px;
+      font-weight: 700; cursor: pointer; border: none;
+      transition: filter 0.15s;
+    }
+    .btn:hover:not(:disabled) { filter: brightness(0.92); }
+    .btn:disabled { opacity: 0.55; cursor: not-allowed; }
+    .btn-primary-sms      { background: var(--sms-color); color: #fff; }
+    .btn-primary-whatsapp { background: var(--wa-color);  color: #fff; }
+    .btn-ghost {
+      background: none; color: var(--muted); padding: 6px 10px;
+      border: 1px dashed var(--border); font-size: 12px;
+    }
+
+    /* Progress */
+    .progress-wrap {
+      height: 5px; border-radius: 99px; background: var(--border); margin-top: 12px; overflow: hidden;
+    }
+    .progress-bar { height: 100%; border-radius: 99px; width: 0; transition: width 0.2s; }
+
+    /* Log */
+    .log-wrap { max-height: 220px; overflow-y: auto; margin-top: 4px; }
+    .log-row {
+      display: flex; align-items: center; gap: 8px; padding: 4px 0;
+      border-bottom: 1px solid var(--bg); font-size: 12px;
+    }
+    .dot {
+      width: 7px; height: 7px; border-radius: 50%; flex-shrink: 0;
+    }
+    .log-phone { flex: 1; font-family: monospace; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .log-detail { color: var(--error); font-size: 11px; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .log-ok-badge {
+      font-size: 10px; font-weight: 700; padding: 1px 7px; border-radius: 99px;
+      background: #D1FAE5; color: #065F46;
+    }
+
+    /* Summary chips */
+    .summary { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+    .sum-chip {
+      font-size: 11px; font-weight: 700; padding: 3px 10px;
+      border-radius: 99px; border: 1px solid; white-space: nowrap;
+    }
+    .sum-ok    { color: var(--ok);   border-color: var(--ok); }
+    .sum-err   { color: var(--error); border-color: var(--error); }
+    .sum-skip  { color: var(--skip); border-color: var(--skip); }
+
+    /* Preview box */
+    .preview-box {
+      padding: 14px; border-radius: 8px; border: 1px solid transparent;
+    }
+    .preview-row { display: flex; gap: 8px; margin-bottom: 4px; font-size: 12px; }
+    .preview-key { min-width: 52px; font-family: monospace; font-weight: 700; flex-shrink: 0; }
+    .preview-val { font-weight: 600; }
+
+    /* Misc */
+    .divider { border: none; border-top: 1px solid var(--border); margin: 16px 0; }
+    .row-between { display: flex; align-items: center; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+    .mt-12 { margin-top: 12px; }
+    .mt-8  { margin-top: 8px; }
+    .muted { font-size: 12px; color: var(--muted); }
+    code   { font-family: monospace; background: #F1F5F9; padding: 1px 5px; border-radius: 4px; font-size: 11px; }
+
+    /* Spinner */
+    .spinner {
+      width: 14px; height: 14px; border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: #fff; border-radius: 50%; animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* Toast */
+    #toast {
+      position: fixed; bottom: 24px; right: 24px; z-index: 99;
+      padding: 10px 18px; border-radius: 9px; font-size: 13px; font-weight: 700;
+      color: #fff; box-shadow: 0 4px 16px rgba(0,0,0,.2);
+      transform: translateY(80px); opacity: 0; transition: all 0.25s;
+      pointer-events: none;
+    }
+    #toast.show { transform: none; opacity: 1; }
+  </style>
+</head>
+<body>
+<div class="page">
+
+  <!-- Header -->
+  <div class="header">
+    <div class="logo">
+      <div class="logo-icon">L</div>
+      <div>
+        <h1>Twilio Sender</h1>
+        <p class="subtitle" id="subtitle">Envoyez des SMS personnalisés via Twilio Messaging Templates</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- Channel selector -->
+  <div class="card">
+    <div class="channel-bar">
+      <span class="channel-label">Canal d'envoi</span>
+      <div class="toggle-group">
+        <button class="toggle-btn active-sms" id="btn-sms" onclick="setChannel('sms')">
+          📱 SMS
+        </button>
+        <button class="toggle-btn" id="btn-whatsapp" onclick="setChannel('whatsapp')">
+          💬 WhatsApp
+        </button>
+      </div>
+      <span class="from-badge" id="from-badge">+13614268071</span>
+    </div>
+  </div>
+
+  <div class="grid">
+    <!-- LEFT -->
+    <div>
+
+      <!-- Recipients -->
+      <div class="card">
+        <h2>Destinataires</h2>
+        <p class="muted" style="margin-bottom:12px">
+          Collez n'importe quel texte : noms, numéros, exports, listes… Les numéros de téléphone seront extraits automatiquement.
+        </p>
+        <textarea id="freetext" rows="7" placeholder="Exemples :&#10;  Jean Dupont  +33 6 12 34 56 78&#10;  Marie Martin : 0698765432&#10;  +212 6 00 11 22 33 — client Maroc&#10;  Ahmed Benali | +216 55 123 456"
+          style="font-family:monospace;font-size:12.5px"
+          oninput="onFreetextChange()"></textarea>
+
+        <div id="phones-area" style="margin-top:12px;display:none">
+          <div class="chips" id="phones-chips"></div>
+        </div>
+        <div id="no-phones" class="muted mt-8" style="display:none">
+          Aucun numéro détecté dans le texte.
+        </div>
+      </div>
+
+      <!-- Template -->
+      <div class="card">
+        <div class="row-between" style="margin-bottom:14px">
+          <h2 style="margin:0">Template Twilio</h2>
+          <div class="chips" id="lang-chips"></div>
+        </div>
+
+        <div class="tpl-info" id="tpl-info">
+          <span id="tpl-name">—</span>
+          <span class="tpl-sid" id="tpl-sid">—</span>
+        </div>
+
+        <p class="muted" style="margin-bottom:14px">
+          Définissez les valeurs des variables. Utilisez <code>[phone]</code> ou du texte statique.
+        </p>
+
+        <div id="vars-container"></div>
+
+        <button class="btn btn-ghost mt-8" onclick="addVar()">+ Ajouter une variable</button>
+
+        <hr class="divider" />
+
+        <div style="display:flex;justify-content:flex-end;align-items:center;gap:12px">
+          <span class="muted" id="count-label">0 destinataire</span>
+          <button class="btn btn-primary-sms" id="send-btn" onclick="sendAll()" disabled>
+            <span id="send-icon">➤</span>
+            <span id="send-label">Envoyer</span>
+          </button>
+        </div>
+
+        <div class="progress-wrap" id="progress-wrap" style="display:none">
+          <div class="progress-bar" id="progress-bar"></div>
+        </div>
+      </div>
+
+      <!-- Log -->
+      <div class="card" id="log-card" style="display:none">
+        <div class="row-between" style="margin-bottom:10px">
+          <h2 style="margin:0">Résultats</h2>
+          <div class="summary" id="summary"></div>
+        </div>
+        <div class="log-wrap" id="log-wrap"></div>
+      </div>
+
+    </div>
+
+    <!-- RIGHT -->
+    <div>
+
+      <!-- Preview -->
+      <div class="card" id="preview-card" style="display:none">
+        <div class="row-between" style="margin-bottom:12px">
+          <h2 style="margin:0">Aperçu</h2>
+          <span class="muted" id="preview-phone" style="font-family:monospace;font-size:11px">—</span>
+        </div>
+        <div class="preview-box" id="preview-box"></div>
+      </div>
+
+      <!-- Phone list -->
+      <div class="card" id="list-card" style="display:none">
+        <h2>Liste d'envoi (<span id="list-count">0</span>)</h2>
+        <div id="phone-list" style="max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ─── State ────────────────────────────────────────────────────────────────────
+let channel      = 'sms';
+let templateLang = 'fr';
+let phones       = [];
+let contentVars  = [{ num: '1', value: '' }];
+let sending      = false;
+let log          = [];
+let fromNumber   = '';
+let TEMPLATES    = {};
+
+const CH = {
+  sms:      { color: '#6366F1', light: '#EEF2FF', prefix: '',          subtitle: 'Envoyez des SMS personnalisés via Twilio Messaging Templates' },
+  whatsapp: { color: '#25D366', light: '#DCFCE7', prefix: 'whatsapp:', subtitle: 'Envoyez des messages WhatsApp personnalisés via Twilio Messaging Templates' },
+};
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', async () => {
+  try {
+    const r    = await fetch('/api/config');
+    const cfg  = await r.json();
+    fromNumber = cfg.from || '';
+    TEMPLATES  = cfg.templates || {};
+    // pick first available lang
+    templateLang = Object.keys(TEMPLATES)[0] || 'fr';
+  } catch (e) {
+    console.error('Failed to load config:', e);
+  }
+
+  renderLangChips();
+  renderVars();
+  applyChannel();
+  updateTplInfo();
+  updateCountLabel();
+});
+
+// ─── Channel ──────────────────────────────────────────────────────────────────
+function setChannel(ch) {
+  channel = ch;
+  applyChannel();
+}
+
+function applyChannel() {
+  const { color, light, prefix, subtitle } = CH[channel];
+  document.getElementById('subtitle').textContent = subtitle;
+
+  document.getElementById('btn-sms').className      = 'toggle-btn' + (channel === 'sms'      ? ' active-sms'      : '');
+  document.getElementById('btn-whatsapp').className = 'toggle-btn' + (channel === 'whatsapp' ? ' active-whatsapp' : '');
+
+  const badge = document.getElementById('from-badge');
+  badge.textContent = `${prefix}${fromNumber}`;
+  badge.className   = 'from-badge' + (channel === 'whatsapp' ? ' wa' : '');
+
+  const sendBtn = document.getElementById('send-btn');
+  sendBtn.className = `btn btn-primary-${channel}`;
+
+  updateTplInfo();
+  renderVars();
+  renderPreview();
+}
+
+// ─── Language chips ───────────────────────────────────────────────────────────
+function renderLangChips() {
+  const wrap = document.getElementById('lang-chips');
+  wrap.innerHTML = Object.entries(TEMPLATES).map(([key, t]) => `
+    <span class="chip ${templateLang === key ? 'active-' + channel : ''}"
+          onclick="setLang('${key}')">${t.flag} ${t.label}</span>
+  `).join('');
+}
+
+function setLang(key) {
+  templateLang = key;
+  renderLangChips();
+  updateTplInfo();
+  renderPreview();
+}
+
+// ─── Template info ────────────────────────────────────────────────────────────
+function updateTplInfo() {
+  const tpl   = TEMPLATES[templateLang];
+  const { color, light } = CH[channel];
+  const info  = document.getElementById('tpl-info');
+  info.style.background   = light;
+  info.style.borderColor  = color + '40';
+  document.getElementById('tpl-name').textContent = `${tpl.flag} ${tpl.name}`;
+  document.getElementById('tpl-name').style.color = color;
+  document.getElementById('tpl-sid').textContent  = tpl.sid.slice(0, 16) + '…';
+}
+
+// ─── Phone extraction ─────────────────────────────────────────────────────────
+function extractPhones(text) {
+  if (!text) return [];
+  const raw = text.match(/\+?[\d][\d\s\-().]{5,}\d/g) ?? [];
+  const cleaned = raw
+    .map(m => m.replace(/[\s\-().]/g, ''))
+    .filter(m => /^\+?\d{7,15}$/.test(m));
+  return [...new Set(cleaned)];
+}
+
+function onFreetextChange() {
+  const text = document.getElementById('freetext').value;
+  phones = extractPhones(text);
+  renderPhoneChips();
+  renderPhoneList();
+  updateCountLabel();
+  renderPreview();
+}
+
+function renderPhoneChips() {
+  const area   = document.getElementById('phones-area');
+  const noArea = document.getElementById('no-phones');
+  const wrap   = document.getElementById('phones-chips');
+
+  const text = document.getElementById('freetext').value.trim();
+  if (!text) { area.style.display = 'none'; noArea.style.display = 'none'; return; }
+
+  if (phones.length === 0) {
+    area.style.display = 'none'; noArea.style.display = 'block'; return;
+  }
+  noArea.style.display = 'none';
+  area.style.display   = 'block';
+
+  wrap.innerHTML = phones.map((p, i) => `
+    <span class="chip phone">
+      ${p}
+      <span class="del" onclick="removePhone(${i})" title="Supprimer">×</span>
+    </span>
+  `).join('');
+}
+
+function removePhone(idx) {
+  phones.splice(idx, 1);
+  // rebuild textarea from remaining phones
+  document.getElementById('freetext').value = phones.join('\n');
+  renderPhoneChips();
+  renderPhoneList();
+  updateCountLabel();
+  renderPreview();
+}
+
+// ─── Template variables ───────────────────────────────────────────────────────
+function renderVars() {
+  const { color, light } = CH[channel];
+  const wrap = document.getElementById('vars-container');
+  wrap.innerHTML = contentVars.map((cv, i) => `
+    <div class="var-row">
+      <div class="var-badge" style="background:${light};color:${color}">{{${cv.num}}}</div>
+      <input type="text" value="${escHtml(cv.value)}"
+             placeholder="ex: [phone], Texte statique"
+             oninput="contentVars[${i}].value=this.value;renderPreview()" />
+      ${contentVars.length > 1
+        ? `<button class="del-btn" onclick="removeVar(${i})">×</button>`
+        : '<span style="width:26px;flex-shrink:0"></span>'}
+    </div>
+  `).join('');
+}
+
+function addVar() {
+  contentVars.push({ num: String(contentVars.length + 1), value: '' });
+  renderVars();
+}
+
+function removeVar(idx) {
+  contentVars.splice(idx, 1);
+  renderVars();
+  renderPreview();
+}
+
+// ─── Preview ──────────────────────────────────────────────────────────────────
+function applyVarTemplate(text, user) {
+  return text.replace(/\[(\w+)\]/g, (_, k) => user[k] ?? `[${k}]`);
+}
+
+function renderPreview() {
+  const card = document.getElementById('preview-card');
+  if (phones.length === 0) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+
+  const user  = { phone: phones[0] };
+  const { color, light } = CH[channel];
+  const box   = document.getElementById('preview-box');
+  box.style.background  = light;
+  box.style.borderColor = color + '40';
+
+  document.getElementById('preview-phone').textContent = phones[0];
+
+  box.innerHTML = contentVars.map(cv => `
+    <div class="preview-row">
+      <span class="preview-key" style="color:${color}">{{${cv.num}}}:</span>
+      <span class="preview-val">${escHtml(applyVarTemplate(cv.value, user) || '—')}</span>
+    </div>
+  `).join('');
+}
+
+// ─── Phone list (right panel) ─────────────────────────────────────────────────
+function renderPhoneList() {
+  const card = document.getElementById('list-card');
+  if (phones.length === 0) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  document.getElementById('list-count').textContent = phones.length;
+  document.getElementById('phone-list').innerHTML = phones.slice(0, 80).map((p, i) => `
+    <div style="display:flex;align-items:center;gap:8px;padding:3px 0;font-size:12px">
+      <span style="color:var(--muted);min-width:24px;text-align:right">#${i + 1}</span>
+      <span style="font-family:monospace">${p}</span>
+    </div>
+  `).join('') + (phones.length > 80 ? `<div class="muted" style="padding-top:6px">+${phones.length - 80} de plus…</div>` : '');
+}
+
+// ─── Count label ──────────────────────────────────────────────────────────────
+function updateCountLabel() {
+  const n = phones.length;
+  document.getElementById('count-label').textContent = `${n} destinataire${n !== 1 ? 's' : ''}`;
+  document.getElementById('send-btn').disabled = sending || n === 0;
+}
+
+// ─── Send ─────────────────────────────────────────────────────────────────────
+async function sendAll() {
+  if (sending || phones.length === 0) return;
+
+  const hasVar = contentVars.some(v => v.value.trim());
+  if (!hasVar) { toast('Au moins une variable de contenu requise', '#F59E0B'); return; }
+
+  sending = true;
+  log = [];
+  document.getElementById('send-btn').disabled = true;
+  document.getElementById('send-icon').innerHTML = '<div class="spinner"></div>';
+  document.getElementById('progress-wrap').style.display = 'block';
+  document.getElementById('log-card').style.display = 'none';
+  setProgress(0);
+
+  const tpl = TEMPLATES[templateLang];
+
+  for (let i = 0; i < phones.length; i++) {
+    const phone = phones[i];
+    const user  = { phone };
+
+    const contentVariables = {};
+    contentVars.forEach(cv => {
+      if (cv.num) contentVariables[cv.num] = applyVarTemplate(cv.value, user);
+    });
+
+    try {
+      const res = await fetch('/api/send', {
+        method:  'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ to: phone, channel, templateSid: tpl.sid, contentVariables }),
+      });
+      const data = await res.json();
+      if (res.ok && data.success) {
+        log.push({ phone, status: 'ok' });
+      } else {
+        log.push({ phone, status: 'error', detail: data.error || `HTTP ${res.status}` });
+      }
+    } catch (err) {
+      log.push({ phone, status: 'error', detail: err.message });
+    }
+
+    setProgress(Math.round(((i + 1) / phones.length) * 100));
+    renderLog();
+
+    if (i < phones.length - 1)
+      await new Promise(r => setTimeout(r, 500));
+  }
+
+  sending = false;
+  document.getElementById('send-icon').textContent = '➤';
+  document.getElementById('send-btn').disabled = phones.length === 0;
+
+  const ok  = log.filter(l => l.status === 'ok').length;
+  const err = log.filter(l => l.status === 'error').length;
+  toast(
+    `${ok} envoyé${ok !== 1 ? 's' : ''} · ${err} erreur${err !== 1 ? 's' : ''}`,
+    err === 0 ? '#10B981' : ok > 0 ? '#F59E0B' : '#EF4444'
+  );
+}
+
+function setProgress(pct) {
+  const bar = document.getElementById('progress-bar');
+  bar.style.width = pct + '%';
+  bar.style.background = CH[channel].color;
+  document.getElementById('send-label').textContent =
+    pct < 100 ? `Envoi… ${pct}%` : 'Envoyer';
+}
+
+function renderLog() {
+  const card = document.getElementById('log-card');
+  card.style.display = 'block';
+
+  const ok   = log.filter(l => l.status === 'ok').length;
+  const err  = log.filter(l => l.status === 'error').length;
+  const skip = log.filter(l => l.status === 'skip').length;
+  document.getElementById('summary').innerHTML = `
+    <span class="sum-chip sum-ok">${ok} envoyés</span>
+    <span class="sum-chip sum-err">${err} erreurs</span>
+    ${skip ? `<span class="sum-chip sum-skip">${skip} ignorés</span>` : ''}
+  `;
+
+  document.getElementById('log-wrap').innerHTML = log.map(l => {
+    const dotColor = l.status === 'ok' ? 'var(--ok)' : l.status === 'error' ? 'var(--error)' : 'var(--skip)';
+    return `
+      <div class="log-row">
+        <div class="dot" style="background:${dotColor}"></div>
+        <span class="log-phone">${l.phone}</span>
+        ${l.status === 'ok'
+          ? '<span class="log-ok-badge">Envoyé ✓</span>'
+          : l.detail
+            ? `<span class="log-detail" title="${escHtml(l.detail)}">${escHtml(l.detail)}</span>`
+            : ''}
+      </div>
+    `;
+  }).join('');
+
+  // scroll to bottom
+  const wrap = document.getElementById('log-wrap');
+  wrap.scrollTop = wrap.scrollHeight;
+}
+
+// ─── Toast ────────────────────────────────────────────────────────────────────
+function toast(msg, bg = '#10B981') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.style.background = bg;
+  el.classList.add('show');
+  setTimeout(() => el.classList.remove('show'), 3000);
+}
+
+// ─── Utils ────────────────────────────────────────────────────────────────────
+function escHtml(s) {
+  return String(s ?? '')
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
+</script>
+</body>
+</html>
